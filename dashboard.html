@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MTC Transport - Dispecerat Livrări</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+  :root{
+    --bg:#10151c; --panel:#1a212b; --panel2:#212a36; --line:#2b3543;
+    --text:#e7ecf3; --muted:#8b97a8; --accent:#ff7a1a; --accent2:#3aa0ff;
+    --ok:#2fb86e; --warn:#e0a82e; --danger:#e2503f;
+    --r:10px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Segoe UI',Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
+  header{background:var(--panel);border-bottom:1px solid var(--line);padding:16px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+  header h1{font-size:18px;margin:0;font-weight:700;letter-spacing:.2px}
+  header h1 span{color:var(--accent)}
+  #connStatus{font-size:12px;padding:4px 10px;border-radius:20px;background:var(--panel2);color:var(--muted)}
+  #connStatus.live{color:var(--ok)}
+  nav{display:flex;gap:6px;padding:12px 20px 0;flex-wrap:wrap}
+  nav button{background:var(--panel2);color:var(--muted);border:1px solid var(--line);padding:9px 16px;border-radius:8px 8px 0 0;cursor:pointer;font-size:14px;font-weight:600}
+  nav button.active{background:var(--bg);color:var(--text);border-bottom:2px solid var(--accent)}
+  main{padding:20px;max-width:1200px;margin:0 auto}
+  .tab{display:none}
+  .tab.active{display:block}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:18px;margin-bottom:16px}
+  .card h2{margin:0 0 14px;font-size:15px;color:var(--accent2);text-transform:uppercase;letter-spacing:.5px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
+  label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
+  input,select{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--text);padding:10px;border-radius:7px;font-size:14px}
+  input:focus,select:focus{outline:2px solid var(--accent2)}
+  .field{margin-bottom:10px}
+  button.btn{background:var(--accent);color:#1a1208;border:none;padding:11px 20px;border-radius:7px;font-weight:700;cursor:pointer;font-size:14px;margin-top:6px}
+  button.btn:hover{filter:brightness(1.08)}
+  button.btn.secondary{background:var(--panel2);color:var(--text);border:1px solid var(--line)}
+  button.btn.danger{background:var(--danger);color:#fff}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;color:var(--muted);font-weight:600;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+  td{padding:8px 10px;border-bottom:1px solid var(--line)}
+  tr:hover td{background:rgba(255,255,255,.02)}
+  .badge{padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;display:inline-block}
+  .badge.zona-c{background:#3aa0ff33;color:#3aa0ff}
+  .badge.zona-n{background:#2fb86e33;color:#2fb86e}
+  .badge.zona-e{background:#e0a82e33;color:#e0a82e}
+  .badge.zona-s{background:#ff7a1a33;color:#ff7a1a}
+  .badge.zona-v{background:#b15ce033;color:#b15ce0}
+  .badge.zona-x{background:#e2503f33;color:#e2503f}
+  .status{padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700}
+  .status.in_depozit{background:#8b97a833;color:#8b97a8}
+  .status.incarcat{background:#3aa0ff33;color:#3aa0ff}
+  .status.in_livrare{background:#e0a82e33;color:#e0a82e}
+  .status.livrat{background:#2fb86e33;color:#2fb86e}
+  .status.livrat_vecin{background:#2fb86e33;color:#2fb86e}
+  .status.neatribuit{background:#e2503f33;color:#e2503f}
+  .scanRow{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+  .scanRow .field{flex:1;min-width:180px}
+  .hint{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.5}
+  .empty{color:var(--muted);font-size:13px;padding:20px;text-align:center}
+  .plzList{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .plzChip{background:var(--panel2);border:1px solid var(--line);border-radius:20px;padding:4px 10px;font-size:12px;display:flex;align-items:center;gap:6px}
+  .plzChip button{background:none;border:none;color:var(--danger);cursor:pointer;font-size:13px;padding:0;font-weight:700}
+  .pinCode{font-family:monospace;font-size:14px;letter-spacing:2px;color:var(--accent)}
+  .setupBox{background:var(--panel2);border:1px dashed var(--line);border-radius:var(--r);padding:16px;font-size:13px;color:var(--muted);line-height:1.6}
+  .setupBox code{background:var(--bg);padding:2px 6px;border-radius:4px;color:var(--accent2)}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>MTC <span>Dispecerat</span> Livrări</h1>
+  <div id="connStatus">conectare...</div>
+</header>
+
+<nav>
+  <button class="tabBtn active" data-tab="ture">Ture</button>
+  <button class="tabBtn" data-tab="scanare">Scanare Pachete</button>
+  <button class="tabBtn" data-tab="pachete">Toate Pachetele</button>
+  <button class="tabBtn" data-tab="zone">Configurare Zone PLZ</button>
+</nav>
+
+<main>
+
+  <!-- SETUP FIREBASE -->
+  <div class="card" id="setupCard" style="display:none">
+    <h2>Configurare necesară</h2>
+    <div class="setupBox">
+      Completează obiectul <code>firebaseConfig</code> din sursa fișierului (caută <code>// TODO firebaseConfig</code>) cu datele proiectului tău Firebase, apoi reîncarcă pagina. Recomand un proiect Firestore nou, de exemplu <code>livrari-mtc</code>, cu Firestore în modul "test" inițial pentru dezvoltare.
+    </div>
+  </div>
+
+  <!-- TAB TURE -->
+  <div class="tab active" id="tab-ture">
+    <div class="card">
+      <h2>Creare tură nouă</h2>
+      <div class="grid">
+        <div class="field"><label>Prenume șofer</label><input id="t-prenume" placeholder="Ion"></div>
+        <div class="field"><label>Nume șofer</label><input id="t-nume" placeholder="Popescu"></div>
+        <div class="field"><label>Număr tură</label><input id="t-numar" placeholder="1"></div>
+        <div class="field"><label>Zonă atribuită</label><select id="t-zona"></select></div>
+        <div class="field"><label>Dată</label><input id="t-data" type="date"></div>
+      </div>
+      <button class="btn" onclick="creeazaTura()">+ Creează tură</button>
+    </div>
+
+    <div class="card">
+      <h2>Ture active</h2>
+      <table>
+        <thead><tr><th>Șofer</th><th>Nr. tură</th><th>Zonă</th><th>Dată</th><th>PIN login</th><th>Pachete</th><th>Status</th><th></th></tr></thead>
+        <tbody id="tureBody"></tbody>
+      </table>
+      <div class="empty" id="tureEmpty" style="display:none">Nicio tură creată încă.</div>
+    </div>
+  </div>
+
+  <!-- TAB SCANARE -->
+  <div class="tab" id="tab-scanare">
+    <div class="card">
+      <h2>Scanare pachet la intrarea în depozit</h2>
+      <div class="scanRow">
+        <div class="field">
+          <label>Cod pachet (focus aici pentru scanner Zebra)</label>
+          <input id="s-cod" placeholder="scanează sau introdu codul" autocomplete="off">
+        </div>
+      </div>
+      <div class="field"><label>Adresă livrare (cu cod poștal)</label><input id="s-adresa" placeholder="Bahnhofstr. 5, 94036 Passau"></div>
+      <button class="btn" onclick="scaneazaPachet()">Salvează pachet</button>
+      <div class="hint" id="s-feedback"></div>
+    </div>
+
+    <div class="card">
+      <h2>Pachete scanate azi</h2>
+      <table>
+        <thead><tr><th>Cod</th><th>Adresă</th><th>PLZ</th><th>Zonă</th><th>Tură atribuită</th><th>Status</th><th>Oră</th></tr></thead>
+        <tbody id="scanateBody"></tbody>
+      </table>
+      <div class="empty" id="scanateEmpty" style="display:none">Niciun pachet scanat azi.</div>
+    </div>
+  </div>
+
+  <!-- TAB TOATE PACHETELE -->
+  <div class="tab" id="tab-pachete">
+    <div class="card">
+      <h2>Toate pachetele</h2>
+      <table>
+        <thead><tr><th>Cod</th><th>Adresă</th><th>Zonă</th><th>Tură</th><th>Status</th><th>Livrare</th><th>Reatribuie</th></tr></thead>
+        <tbody id="toatePacheteBody"></tbody>
+      </table>
+      <div class="empty" id="toatePacheteEmpty" style="display:none">Niciun pachet în sistem.</div>
+    </div>
+  </div>
+
+  <!-- TAB ZONE -->
+  <div class="tab" id="tab-zone">
+    <div class="card">
+      <h2>Despre zonele Landkreis Passau</h2>
+      <div class="hint">
+        Gruparea de mai jos (Oraș / Nord / Est / Sud / Vest) e un draft făcut pe baza datelor publice de coduri poștale, nu pe cunoaștere locală exactă a rutelor. Verifică și corectează codurile poștale per zonă mai jos — modificările se salvează direct în Firestore, fără să umbli în cod.
+      </div>
+    </div>
+    <div class="card">
+      <h2>Adaugă cod poștal la o zonă</h2>
+      <div class="scanRow">
+        <div class="field"><label>Cod poștal (PLZ)</label><input id="z-plz" placeholder="94032" maxlength="5"></div>
+        <div class="field"><label>Zonă</label><select id="z-zona"></select></div>
+        <div class="field" style="flex:0"><button class="btn" onclick="adaugaPlz()">Adaugă</button></div>
+      </div>
+    </div>
+    <div id="zoneCards"></div>
+  </div>
+
+</main>
+
+<script>
+// ============== TODO firebaseConfig ==============
+const firebaseConfig = {
+  apiKey: "AIzaSyCwlTzMHhXsGcPcnH0U-3vKQ38oHBGsgfI",
+  authDomain: "livrari-mtc.firebaseapp.com",
+  projectId: "livrari-mtc",
+  storageBucket: "livrari-mtc.firebasestorage.app",
+  messagingSenderId: "148138608126",
+  appId: "1:148138608126:web:700903c89e697c11cdecaf"
+};
+// ===================================================
+
+const ZONE = [
+  {cod:'PA-C', nume:'Passau Oraș'},
+  {cod:'PA-N', nume:'Nord'},
+  {cod:'PA-E', nume:'Est'},
+  {cod:'PA-S', nume:'Sud'},
+  {cod:'PA-V', nume:'Vest'}
+];
+
+// Draft inițial PLZ -> zonă (Landkreis Passau). Editabil din tab "Configurare Zone PLZ".
+const SEED_PLZ = {
+  '94032':'PA-C','94034':'PA-C','94036':'PA-C',
+  '94121':'PA-N','94124':'PA-N','94122':'PA-N','94136':'PA-N','94116':'PA-N','94114':'PA-N','94104':'PA-N','94139':'PA-N','94110':'PA-N',
+  '94128':'PA-E','94130':'PA-E','94107':'PA-E','94049':'PA-E','94051':'PA-E',
+  '94079':'PA-S','94081':'PA-S','94082':'PA-S','94083':'PA-S','94086':'PA-S','94052':'PA-S','94053':'PA-S','94066':'PA-S','94067':'PA-S','94068':'PA-S','94072':'PA-S','94094':'PA-S','94099':'PA-S','94113':'PA-S',
+  '94125':'PA-V','94127':'PA-V','94492':'PA-V','94493':'PA-V','94496':'PA-V','94497':'PA-V','94498':'PA-V','94501':'PA-V','94502':'PA-V','94535':'PA-V','94538':'PA-V','94542':'PA-V','94544':'PA-V','94148':'PA-V','94149':'PA-V','94152':'PA-V','94154':'PA-V','94155':'PA-V'
+};
+
+let db = null;
+let pacheteCache = [];
+let tureCache = [];
+let plzCache = {};
+
+function zoneBadgeClass(zona){
+  const map = {'PA-C':'zona-c','PA-N':'zona-n','PA-E':'zona-e','PA-S':'zona-s','PA-V':'zona-v'};
+  return map[zona] || 'zona-x';
+}
+function zoneNume(cod){ const z = ZONE.find(z=>z.cod===cod); return z ? z.nume : cod; }
+function todayStr(){ return new Date().toISOString().slice(0,10); }
+function genPin(){ return String(Math.floor(1000+Math.random()*9000)); }
+
+function initSelects(){
+  document.querySelectorAll('#t-zona, #z-zona').forEach(sel=>{
+    sel.innerHTML = ZONE.map(z=>`<option value="${z.cod}">${z.cod} - ${z.nume}</option>`).join('');
+  });
+  document.getElementById('t-data').value = todayStr();
+}
+
+async function init(){
+  initSelects();
+  if(firebaseConfig.apiKey === "PASTE_API_KEY"){
+    document.getElementById('setupCard').style.display = 'block';
+    document.getElementById('connStatus').textContent = 'neconfigurat';
+    return;
+  }
+  firebase.initializeApp(firebaseConfig);
+  db = firebase.firestore();
+  document.getElementById('connStatus').textContent = 'live';
+  document.getElementById('connStatus').classList.add('live');
+
+  await seedZonePlzIfEmpty();
+
+  db.collection('ture').orderBy('createdAt','desc').onSnapshot(snap=>{
+    tureCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    renderTure();
+    renderZoneCards();
+  });
+
+  db.collection('pachete').orderBy('createdAt','desc').onSnapshot(snap=>{
+    pacheteCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    renderScanate();
+    renderToatePachetele();
+    renderTure();
+  });
+
+  db.collection('zonePlz').onSnapshot(snap=>{
+    plzCache = {};
+    snap.docs.forEach(d=>{ plzCache[d.id] = d.data().zona; });
+    renderZoneCards();
+  });
+}
+
+async function seedZonePlzIfEmpty(){
+  const snap = await db.collection('zonePlz').limit(1).get();
+  if(!snap.empty) return;
+  const batch = db.batch();
+  Object.entries(SEED_PLZ).forEach(([plz,zona])=>{
+    batch.set(db.collection('zonePlz').doc(plz), {zona});
+  });
+  await batch.commit();
+}
+
+// ---------- TURE ----------
+async function creeazaTura(){
+  const prenume = document.getElementById('t-prenume').value.trim();
+  const nume = document.getElementById('t-nume').value.trim();
+  const numarTura = document.getElementById('t-numar').value.trim();
+  const zona = document.getElementById('t-zona').value;
+  const data = document.getElementById('t-data').value;
+  if(!prenume || !nume || !numarTura || !data){ alert('Completează toate câmpurile.'); return; }
+  await db.collection('ture').add({
+    prenume, nume, numarTura, zona, data,
+    pin: genPin(),
+    status: 'activa',
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+  document.getElementById('t-prenume').value = '';
+  document.getElementById('t-nume').value = '';
+  document.getElementById('t-numar').value = '';
+}
+
+async function inchideTura(id){
+  if(!confirm('Închizi această tură?')) return;
+  await db.collection('ture').doc(id).update({status:'inchisa'});
+}
+
+function renderTure(){
+  const body = document.getElementById('tureBody');
+  const active = tureCache.filter(t=>t.status==='activa');
+  document.getElementById('tureEmpty').style.display = tureCache.length ? 'none':'block';
+  body.innerHTML = tureCache.map(t=>{
+    const nrPachete = pacheteCache.filter(p=>p.turaId===t.id).length;
+    return `<tr>
+      <td>${t.prenume} ${t.nume}</td>
+      <td>${t.numarTura}</td>
+      <td><span class="badge ${zoneBadgeClass(t.zona)}">${t.zona}</span></td>
+      <td>${t.data}</td>
+      <td class="pinCode">${t.pin}</td>
+      <td>${nrPachete}</td>
+      <td>${t.status==='activa' ? '<span class="status incarcat">activă</span>' : '<span class="status in_depozit">închisă</span>'}</td>
+      <td>${t.status==='activa' ? `<button class="btn danger" style="padding:6px 10px;font-size:12px" onclick="inchideTura('${t.id}')">Închide</button>` : ''}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ---------- SCANARE PACHETE ----------
+function extragePlz(adresa){
+  const m = adresa.match(/\b(\d{5})\b/);
+  return m ? m[1] : null;
+}
+
+async function scaneazaPachet(){
+  const cod = document.getElementById('s-cod').value.trim();
+  const adresa = document.getElementById('s-adresa').value.trim();
+  const fb = document.getElementById('s-feedback');
+  if(!cod || !adresa){ fb.textContent = 'Introdu codul și adresa.'; fb.style.color='var(--danger)'; return; }
+
+  const plz = extragePlz(adresa);
+  const zona = plz ? (plzCache[plz] || null) : null;
+
+  let turaId = null;
+  if(zona){
+    const candidat = tureCache.find(t => t.status==='activa' && t.zona===zona && t.data===todayStr());
+    if(candidat) turaId = candidat.id;
+  }
+
+  await db.collection('pachete').add({
+    cod, adresa, plz: plz || '-', zona: zona || 'neatribuit',
+    turaId, status: turaId ? 'in_depozit' : 'in_depozit',
+    semnatura: null, vecin: null,
+    oraScanareDepozit: firebase.firestore.FieldValue.serverTimestamp(),
+    oraIncarcare: null, oraLivrare: null,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+
+  if(!plz){ fb.textContent = '⚠ Nu am găsit cod poștal în adresă — verifică manual și reatribuie din "Toate Pachetele".'; fb.style.color='var(--warn)'; }
+  else if(!zona){ fb.textContent = `⚠ Codul poștal ${plz} nu e mapat la nicio zonă încă — adaugă-l în "Configurare Zone PLZ".`; fb.style.color='var(--warn)'; }
+  else if(!turaId){ fb.textContent = `⚠ Zonă ${zona} identificată, dar nu există tură activă azi pe această zonă — atribuie manual.`; fb.style.color='var(--warn)'; }
+  else { fb.textContent = `✓ Pachet atribuit zonei ${zona}.`; fb.style.color='var(--ok)'; }
+
+  document.getElementById('s-cod').value = '';
+  document.getElementById('s-adresa').value = '';
+  document.getElementById('s-cod').focus();
+}
+
+function renderScanate(){
+  const azi = pacheteCache.filter(p => {
+    const d = p.oraScanareDepozit && p.oraScanareDepozit.toDate ? p.oraScanareDepozit.toDate() : null;
+    if(!d) return true;
+    return d.toISOString().slice(0,10) === todayStr();
+  });
+  document.getElementById('scanateEmpty').style.display = azi.length ? 'none':'block';
+  document.getElementById('scanateBody').innerHTML = azi.map(p=>{
+    const tura = tureCache.find(t=>t.id===p.turaId);
+    const ora = p.oraScanareDepozit && p.oraScanareDepozit.toDate ? p.oraScanareDepozit.toDate().toLocaleTimeString('ro-RO',{hour:'2-digit',minute:'2-digit'}) : '-';
+    return `<tr>
+      <td>${p.cod}</td><td>${p.adresa}</td><td>${p.plz}</td>
+      <td><span class="badge ${zoneBadgeClass(p.zona)}">${p.zona}</span></td>
+      <td>${tura ? tura.prenume+' '+tura.nume+' (#'+tura.numarTura+')' : '<span class="status neatribuit">neatribuit</span>'}</td>
+      <td><span class="status ${p.status}">${p.status.replace('_',' ')}</span></td>
+      <td>${ora}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ---------- TOATE PACHETELE ----------
+function renderToatePachetele(){
+  document.getElementById('toatePacheteEmpty').style.display = pacheteCache.length ? 'none':'block';
+  document.getElementById('toatePacheteBody').innerHTML = pacheteCache.map(p=>{
+    const tura = tureCache.find(t=>t.id===p.turaId);
+    const oraLiv = p.oraLivrare && p.oraLivrare.toDate ? p.oraLivrare.toDate().toLocaleString('ro-RO') : '-';
+    const tureOptions = tureCache.filter(t=>t.status==='activa').map(t=>`<option value="${t.id}" ${t.id===p.turaId?'selected':''}>${t.prenume} ${t.nume} #${t.numarTura} (${t.zona})</option>`).join('');
+    return `<tr>
+      <td>${p.cod}</td><td>${p.adresa}</td>
+      <td><span class="badge ${zoneBadgeClass(p.zona)}">${p.zona}</span></td>
+      <td>${tura ? tura.prenume+' '+tura.nume : '-'}</td>
+      <td><span class="status ${p.status}">${p.status.replace('_',' ')}</span></td>
+      <td>${oraLiv}</td>
+      <td><select onchange="reatribuie('${p.id}', this.value)"><option value="">-- alege tură --</option>${tureOptions}</select></td>
+    </tr>`;
+  }).join('');
+}
+
+async function reatribuie(pachetId, turaId){
+  if(!turaId) return;
+  const tura = tureCache.find(t=>t.id===turaId);
+  await db.collection('pachete').doc(pachetId).update({turaId, zona: tura.zona});
+}
+
+// ---------- ZONE PLZ ----------
+async function adaugaPlz(){
+  const plz = document.getElementById('z-plz').value.trim();
+  const zona = document.getElementById('z-zona').value;
+  if(!/^\d{5}$/.test(plz)){ alert('Cod poștal invalid - trebuie 5 cifre.'); return; }
+  await db.collection('zonePlz').doc(plz).set({zona});
+  document.getElementById('z-plz').value = '';
+}
+
+async function stergePlz(plz){
+  await db.collection('zonePlz').doc(plz).delete();
+}
+
+function renderZoneCards(){
+  const cont = document.getElementById('zoneCards');
+  cont.innerHTML = ZONE.map(z=>{
+    const coduri = Object.entries(plzCache).filter(([k,v])=>v===z.cod).map(([k])=>k).sort();
+    return `<div class="card">
+      <h2><span class="badge ${zoneBadgeClass(z.cod)}">${z.cod}</span> ${z.nume} <span style="color:var(--muted);font-weight:400">(${coduri.length} coduri poștale)</span></h2>
+      <div class="plzList">
+        ${coduri.map(c=>`<div class="plzChip">${c}<button onclick="stergePlz('${c}')">×</button></div>`).join('') || '<span class="empty" style="padding:4px">Niciun cod poștal încă.</span>'}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+document.querySelectorAll('.tabBtn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.tabBtn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-'+btn.dataset.tab).classList.add('active');
+  });
+});
+
+init();
+</script>
+</body>
+</html>

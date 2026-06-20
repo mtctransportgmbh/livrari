@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>MTC Curier</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+  :root{
+    --bg:#10151c; --panel:#1a212b; --panel2:#212a36; --line:#2b3543;
+    --text:#e7ecf3; --muted:#8b97a8; --accent:#ff7a1a; --ok:#2fb86e; --warn:#e0a82e; --danger:#e2503f;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:'Segoe UI',Roboto,Arial,sans-serif}
+  #app{max-width:480px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column}
+  header{padding:16px 18px;background:var(--panel);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:5}
+  header h1{font-size:16px;margin:0;font-weight:700}
+  header h1 span{color:var(--accent)}
+  .pill{font-size:11px;background:var(--panel2);padding:4px 10px;border-radius:20px;color:var(--muted)}
+  main{flex:1;padding:18px;padding-bottom:90px}
+  .screen{display:none}
+  .screen.active{display:block}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:14px}
+  label{font-size:12px;color:var(--muted);display:block;margin-bottom:6px}
+  input{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--text);padding:14px;border-radius:9px;font-size:18px;margin-bottom:12px;text-align:center}
+  input:focus{outline:2px solid var(--accent)}
+  .btn{display:block;width:100%;background:var(--accent);color:#1a1208;border:none;padding:16px;border-radius:10px;font-weight:800;font-size:16px;cursor:pointer;margin-bottom:10px}
+  .btn.secondary{background:var(--panel2);color:var(--text);border:1px solid var(--line)}
+  .btn.ok{background:var(--ok);color:#06200f}
+  .btn.outline{background:transparent;border:2px solid var(--accent);color:var(--accent)}
+  .btn:disabled{opacity:.4}
+  .progress{height:8px;background:var(--panel2);border-radius:20px;overflow:hidden;margin-bottom:14px}
+  .progress div{height:100%;background:var(--ok);transition:width .3s}
+  .pkgRow{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--line)}
+  .pkgRow:last-child{border-bottom:none}
+  .pkgCod{font-weight:700;font-size:14px}
+  .pkgAdr{font-size:12px;color:var(--muted)}
+  .check{width:26px;height:26px;border-radius:50%;border:2px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:14px}
+  .check.done{background:var(--ok);border-color:var(--ok);color:#06200f}
+  .stopCard{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:12px}
+  .stopCard.done{opacity:.5}
+  .stopAdr{font-weight:700;font-size:15px;margin-bottom:2px}
+  .stopMeta{font-size:12px;color:var(--muted);margin-bottom:10px}
+  .stopActions{display:flex;gap:8px}
+  .stopActions .btn{margin-bottom:0;padding:11px;font-size:13px}
+  .reorderBtns{display:flex;flex-direction:column;gap:4px}
+  .reorderBtns button{background:var(--panel2);border:1px solid var(--line);color:var(--text);width:30px;height:30px;border-radius:6px;font-size:14px}
+  .stopHead{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+  canvas{background:#fff;border-radius:9px;width:100%;touch-action:none;margin-bottom:12px}
+  .empty{text-align:center;color:var(--muted);padding:40px 20px;font-size:14px}
+  .tag{font-size:11px;padding:2px 8px;border-radius:20px;background:var(--panel2);color:var(--muted);display:inline-block;margin-bottom:6px}
+  .bigStat{font-size:36px;font-weight:800;color:var(--ok)}
+  .center{text-align:center}
+  .feedback{font-size:13px;text-align:center;margin-bottom:10px;min-height:18px}
+  .setupBox{background:var(--panel2);border:1px dashed var(--line);border-radius:10px;padding:14px;font-size:13px;color:var(--muted);line-height:1.6}
+  .setupBox code{background:var(--bg);padding:2px 6px;border-radius:4px;color:#3aa0ff}
+  .backLink{color:var(--muted);font-size:13px;margin-bottom:14px;display:inline-block;cursor:pointer}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <h1>MTC <span>Curier</span></h1>
+    <div class="pill" id="headerPill">neconectat</div>
+  </header>
+
+  <main>
+
+    <div class="card" id="setupCard" style="display:none">
+      <div class="setupBox">
+        Completează <code>firebaseConfig</code> din sursa fișierului cu datele aceluiași proiect Firebase folosit de dashboard, apoi reîncarcă pagina.
+      </div>
+    </div>
+
+    <!-- LOGIN -->
+    <div class="screen active" id="screen-login">
+      <div class="card">
+        <label>Număr tură</label>
+        <input id="login-numar" inputmode="numeric" placeholder="1">
+        <label>PIN (4 cifre, primit de la dispecerat)</label>
+        <input id="login-pin" inputmode="numeric" maxlength="4" placeholder="••••">
+        <div class="feedback" id="login-feedback"></div>
+        <button class="btn" onclick="login()">Intră în tură</button>
+      </div>
+    </div>
+
+    <!-- INCARCARE -->
+    <div class="screen" id="screen-incarcare">
+      <span class="backLink" onclick="logout()">← Ieși din tură</span>
+      <div class="card">
+        <div class="tag" id="inc-info"></div>
+        <div class="progress"><div id="inc-bar" style="width:0%"></div></div>
+        <div id="inc-stat" class="center" style="font-size:13px;color:var(--muted);margin-bottom:14px"></div>
+        <label>Scanează pachetul la încărcare</label>
+        <input id="inc-scan" placeholder="cod pachet" autocomplete="off">
+        <div class="feedback" id="inc-feedback"></div>
+      </div>
+      <div class="card" id="inc-listaCard">
+        <div id="inc-lista"></div>
+      </div>
+      <button class="btn ok" id="inc-continua" onclick="incepeTraseu()" disabled>Începe traseul</button>
+    </div>
+
+    <!-- TRASEU -->
+    <div class="screen" id="screen-traseu">
+      <div class="card center">
+        <div class="bigStat" id="tr-ramase">0</div>
+        <div style="font-size:12px;color:var(--muted)">opriri rămase din <span id="tr-total">0</span></div>
+      </div>
+      <div id="tr-lista"></div>
+      <button class="btn secondary" onclick="finalizeazaTura()">Finalizează tura</button>
+    </div>
+
+    <!-- LIVRARE OPRIRE -->
+    <div class="screen" id="screen-livrare">
+      <span class="backLink" onclick="showScreen('traseu')">← Înapoi la traseu</span>
+      <div class="card">
+        <div class="tag">Oprire curentă</div>
+        <div class="stopAdr" id="liv-adresa"></div>
+        <button class="btn outline" onclick="navigheaza()">📍 Navighează (Google Maps)</button>
+      </div>
+
+      <div class="card">
+        <label>Scanează fiecare pachet la livrare</label>
+        <input id="liv-scan" placeholder="cod pachet" autocomplete="off">
+        <div id="liv-lista"></div>
+      </div>
+
+      <div class="card" id="liv-actiuni" style="display:none">
+        <button class="btn ok" onclick="modSemnatura()">✓ Livrare cu semnătură</button>
+        <button class="btn secondary" onclick="modVecin()">Livrare la vecin</button>
+      </div>
+
+      <div class="card" id="liv-semnaturaCard" style="display:none">
+        <label>Semnătură client</label>
+        <canvas id="liv-canvas" height="180"></canvas>
+        <button class="btn secondary" onclick="stergeSemnatura()">Șterge</button>
+        <button class="btn ok" onclick="confirmaSemnatura()">Confirmă livrarea</button>
+      </div>
+
+      <div class="card" id="liv-vecinCard" style="display:none">
+        <label>Nume vecin / apartament</label>
+        <input id="liv-vecinNume" placeholder="ex: Vecin et. 2, dna Müller">
+        <button class="btn ok" onclick="confirmaVecin()">Confirmă livrarea la vecin</button>
+      </div>
+    </div>
+
+    <!-- FINAL -->
+    <div class="screen" id="screen-final">
+      <div class="card center">
+        <div style="font-size:40px;margin-bottom:10px">✅</div>
+        <div style="font-weight:700;font-size:16px;margin-bottom:6px">Tură finalizată</div>
+        <div style="color:var(--muted);font-size:13px" id="final-rezumat"></div>
+      </div>
+      <button class="btn" onclick="logout()">Ieși</button>
+    </div>
+
+  </main>
+</div>
+
+<script>
+// ============== TODO firebaseConfig (același proiect ca dashboard.html) ==============
+const firebaseConfig = {
+  apiKey: "AIzaSyCwlTzMHhXsGcPcnH0U-3vKQ38oHBGsgfI",
+  authDomain: "livrari-mtc.firebaseapp.com",
+  projectId: "livrari-mtc",
+  storageBucket: "livrari-mtc.firebasestorage.app",
+  messagingSenderId: "148138608126",
+  appId: "1:148138608126:web:700903c89e697c11cdecaf"
+};
+// =======================================================================================
+
+let db = null;
+let currentTura = null;
+let pachete = [];          // toate pachetele turei curente
+let stops = [];            // opriri grupate pe adresa, in ordine
+let currentStopIdx = null;
+let canvasCtx = null;
+let drawing = false;
+let semnaturaGoala = true;
+
+function init(){
+  if(firebaseConfig.apiKey === "PASTE_API_KEY"){
+    document.getElementById('setupCard').style.display = 'block';
+    return;
+  }
+  firebase.initializeApp(firebaseConfig);
+  db = firebase.firestore();
+  document.getElementById('login-numar').focus();
+}
+
+function showScreen(name){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById('screen-'+name).classList.add('active');
+}
+
+// ---------- LOGIN ----------
+async function login(){
+  const numar = document.getElementById('login-numar').value.trim();
+  const pin = document.getElementById('login-pin').value.trim();
+  const fb = document.getElementById('login-feedback');
+  if(!numar || pin.length !== 4){ fb.textContent='Completează numărul turei și PIN-ul (4 cifre).'; fb.style.color='var(--danger)'; return; }
+
+  const today = new Date().toISOString().slice(0,10);
+  const snap = await db.collection('ture')
+    .where('numarTura','==',numar)
+    .where('pin','==',pin)
+    .where('status','==','activa')
+    .get();
+
+  const tura = snap.docs.find(d=>d.data().data === today);
+  if(!tura){ fb.textContent = 'Nu am găsit o tură activă azi cu aceste date.'; fb.style.color='var(--danger)'; return; }
+
+  currentTura = {id: tura.id, ...tura.data()};
+  document.getElementById('headerPill').textContent = currentTura.prenume + ' • Tură #' + currentTura.numarTura;
+
+  await incarcaPachete();
+  showScreen('incarcare');
+}
+
+function logout(){
+  currentTura = null;
+  pachete = []; stops = [];
+  document.getElementById('login-pin').value = '';
+  document.getElementById('headerPill').textContent = 'neconectat';
+  showScreen('login');
+}
+
+// ---------- INCARCARE ----------
+async function incarcaPachete(){
+  const snap = await db.collection('pachete').where('turaId','==',currentTura.id).get();
+  pachete = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  renderIncarcare();
+}
+
+function renderIncarcare(){
+  const total = pachete.length;
+  const incarcate = pachete.filter(p=>p.status!=='in_depozit').length;
+  document.getElementById('inc-info').textContent = `Zonă ${currentTura.zona} • ${total} pachete de încărcat`;
+  document.getElementById('inc-bar').style.width = total ? Math.round(incarcate/total*100)+'%' : '0%';
+  document.getElementById('inc-stat').textContent = `${incarcate} / ${total} scanate`;
+  document.getElementById('inc-continua').disabled = !(total>0 && incarcate===total);
+
+  document.getElementById('inc-lista').innerHTML = pachete.map(p=>`
+    <div class="pkgRow">
+      <div>
+        <div class="pkgCod">${p.cod}</div>
+        <div class="pkgAdr">${p.adresa}</div>
+      </div>
+      <div class="check ${p.status!=='in_depozit'?'done':''}">${p.status!=='in_depozit'?'✓':''}</div>
+    </div>`).join('') || '<div class="empty">Niciun pachet atribuit acestei ture încă.</div>';
+}
+
+document.getElementById('inc-scan').addEventListener('keydown', async (e)=>{
+  if(e.key !== 'Enter') return;
+  const cod = e.target.value.trim();
+  e.target.value = '';
+  if(!cod) return;
+  const fb = document.getElementById('inc-feedback');
+  const pkg = pachete.find(p=>p.cod===cod);
+  if(!pkg){ fb.textContent = `Codul ${cod} nu aparține acestei ture.`; fb.style.color='var(--danger)'; return; }
+  if(pkg.status !== 'in_depozit'){ fb.textContent = `${cod} e deja scanat.`; fb.style.color='var(--warn)'; return; }
+
+  await db.collection('pachete').doc(pkg.id).update({
+    status:'incarcat', oraIncarcare: firebase.firestore.FieldValue.serverTimestamp()
+  });
+  pkg.status = 'incarcat';
+  fb.textContent = `✓ ${cod} încărcat.`; fb.style.color='var(--ok)';
+  renderIncarcare();
+});
+
+// ---------- TRASEU ----------
+function incepeTraseu(){
+  const grupuri = {};
+  pachete.forEach(p=>{
+    if(!grupuri[p.adresa]) grupuri[p.adresa] = [];
+    grupuri[p.adresa].push(p);
+  });
+  stops = Object.entries(grupuri).map(([adresa, pkgs])=>({adresa, pachete: pkgs, livrat: pkgs.every(p=>p.status==='livrat'||p.status==='livrat_vecin')}));
+  renderTraseu();
+  showScreen('traseu');
+}
+
+function renderTraseu(){
+  const ramase = stops.filter(s=>!s.livrat).length;
+  document.getElementById('tr-ramase').textContent = ramase;
+  document.getElementById('tr-total').textContent = stops.length;
+
+  document.getElementById('tr-lista').innerHTML = stops.map((s,i)=>`
+    <div class="stopCard ${s.livrat?'done':''}">
+      <div class="stopHead">
+        <div style="flex:1">
+          <div class="stopAdr">${s.adresa}</div>
+          <div class="stopMeta">${s.pachete.length} pachet(e) ${s.livrat?'• livrat':''}</div>
+        </div>
+        <div class="reorderBtns">
+          <button onclick="mutaOprire(${i},-1)" ${i===0?'disabled':''}>↑</button>
+          <button onclick="mutaOprire(${i},1)" ${i===stops.length-1?'disabled':''}>↓</button>
+        </div>
+      </div>
+      ${!s.livrat ? `<div class="stopActions"><button class="btn" style="margin:0" onclick="deschideLivrare(${i})">Deschide livrare</button></div>` : ''}
+    </div>`).join('') || '<div class="empty">Niciun pachet încărcat.</div>';
+}
+
+function mutaOprire(i, dir){
+  const j = i+dir;
+  if(j<0 || j>=stops.length) return;
+  [stops[i], stops[j]] = [stops[j], stops[i]];
+  renderTraseu();
+}
+
+function finalizeazaTura(){
+  const livrate = stops.filter(s=>s.livrat).length;
+  if(stops.length && livrate < stops.length){
+    if(!confirm('Mai sunt opriri nelivrate. Sigur închei tura?')) return;
+  }
+  document.getElementById('final-rezumat').textContent = `${livrate} din ${stops.length} opriri livrate.`;
+  showScreen('final');
+}
+
+// ---------- LIVRARE OPRIRE ----------
+function deschideLivrare(idx){
+  currentStopIdx = idx;
+  const s = stops[idx];
+  document.getElementById('liv-adresa').textContent = s.adresa;
+  document.getElementById('liv-actiuni').style.display = 'none';
+  document.getElementById('liv-semnaturaCard').style.display = 'none';
+  document.getElementById('liv-vecinCard').style.display = 'none';
+  renderLivList();
+  showScreen('livrare');
+  setTimeout(()=>document.getElementById('liv-scan').focus(), 200);
+}
+
+function renderLivList(){
+  const s = stops[currentStopIdx];
+  document.getElementById('liv-lista').innerHTML = s.pachete.map(p=>`
+    <div class="pkgRow">
+      <div><div class="pkgCod">${p.cod}</div></div>
+      <div class="check ${p._scanat?'done':''}">${p._scanat?'✓':''}</div>
+    </div>`).join('');
+  const toateScanate = s.pachete.every(p=>p._scanat);
+  document.getElementById('liv-actiuni').style.display = toateScanate ? 'block':'none';
+}
+
+document.getElementById('liv-scan').addEventListener('keydown', (e)=>{
+  if(e.key !== 'Enter') return;
+  const cod = e.target.value.trim();
+  e.target.value = '';
+  if(!cod || currentStopIdx===null) return;
+  const s = stops[currentStopIdx];
+  const pkg = s.pachete.find(p=>p.cod===cod);
+  if(!pkg) return;
+  pkg._scanat = true;
+  renderLivList();
+});
+
+function navigheaza(){
+  const adresa = stops[currentStopIdx].adresa;
+  const url = 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(adresa);
+  window.open(url, '_blank');
+}
+
+function obtineLocatie(){
+  return new Promise(resolve=>{
+    if(!navigator.geolocation){ resolve(null); return; }
+    navigator.geolocation.getCurrentPosition(
+      pos => resolve({lat:pos.coords.latitude, lng:pos.coords.longitude}),
+      () => resolve(null),
+      {timeout:4000}
+    );
+  });
+}
+
+// --- semnatura ---
+function modSemnatura(){
+  document.getElementById('liv-semnaturaCard').style.display = 'block';
+  document.getElementById('liv-vecinCard').style.display = 'none';
+  const canvas = document.getElementById('liv-canvas');
+  canvas.width = canvas.offsetWidth;
+  canvasCtx = canvas.getContext('2d');
+  canvasCtx.fillStyle = '#fff';
+  canvasCtx.fillRect(0,0,canvas.width,canvas.height);
+  canvasCtx.strokeStyle = '#10151c';
+  canvasCtx.lineWidth = 2.5;
+  canvasCtx.lineJoin = 'round';
+  canvasCtx.lineCap = 'round';
+  semnaturaGoala = true;
+
+  const pos = e => {
+    const r = canvas.getBoundingClientRect();
+    const p = e.touches ? e.touches[0] : e;
+    return {x: p.clientX-r.left, y: p.clientY-r.top};
+  };
+  canvas.onpointerdown = e => { drawing=true; const p=pos(e); canvasCtx.beginPath(); canvasCtx.moveTo(p.x,p.y); };
+  canvas.onpointermove = e => { if(!drawing) return; const p=pos(e); canvasCtx.lineTo(p.x,p.y); canvasCtx.stroke(); semnaturaGoala=false; };
+  canvas.onpointerup = () => drawing=false;
+  canvas.onpointerleave = () => drawing=false;
+}
+
+function stergeSemnatura(){
+  canvasCtx.fillStyle = '#fff';
+  canvasCtx.fillRect(0,0,document.getElementById('liv-canvas').width, document.getElementById('liv-canvas').height);
+  semnaturaGoala = true;
+}
+
+async function confirmaSemnatura(){
+  if(semnaturaGoala){ alert('Cere clientului să semneze pe ecran.'); return; }
+  const dataUrl = document.getElementById('liv-canvas').toDataURL('image/png');
+  const loc = await obtineLocatie();
+  await salveazaLivrare({status:'livrat', semnatura: dataUrl, locatie: loc});
+}
+
+// --- vecin ---
+function modVecin(){
+  document.getElementById('liv-vecinCard').style.display = 'block';
+  document.getElementById('liv-semnaturaCard').style.display = 'none';
+}
+
+async function confirmaVecin(){
+  const nume = document.getElementById('liv-vecinNume').value.trim();
+  if(!nume){ alert('Introdu numele / detaliile vecinului.'); return; }
+  const loc = await obtineLocatie();
+  await salveazaLivrare({status:'livrat_vecin', vecin:{nume}, locatie: loc});
+  document.getElementById('liv-vecinNume').value = '';
+}
+
+async function salveazaLivrare({status, semnatura=null, vecin=null, locatie=null}){
+  const s = stops[currentStopIdx];
+  const batch = db.batch();
+  s.pachete.forEach(p=>{
+    batch.update(db.collection('pachete').doc(p.id), {
+      status, semnatura, vecin, locatieLivrare: locatie,
+      oraLivrare: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    p.status = status;
+  });
+  await batch.commit();
+  s.livrat = true;
+  renderTraseu();
+  showScreen('traseu');
+}
+
+init();
+</script>
+</body>
+</html>
