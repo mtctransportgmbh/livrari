@@ -6,6 +6,7 @@
 <title>MTC Transport - Dispecerat Livrări</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <style>
   :root{
     --bg:#10151c; --panel:#1a212b; --panel2:#212a36; --line:#2b3543;
@@ -65,6 +66,18 @@
   .pinCode{font-family:monospace;font-size:14px;letter-spacing:2px;color:var(--accent)}
   .setupBox{background:var(--panel2);border:1px dashed var(--line);border-radius:var(--r);padding:16px;font-size:13px;color:var(--muted);line-height:1.6}
   .setupBox code{background:var(--bg);padding:2px 6px;border-radius:4px;color:var(--accent2)}
+  .barcodeCard{background:var(--panel2);border:1px solid var(--line);border-radius:var(--r);padding:14px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .barcodeCard .info{flex:1;min-width:180px}
+  .barcodeCard .cod{font-family:monospace;font-size:15px;font-weight:700;color:var(--accent);margin-bottom:2px}
+  .barcodeCard .adr{font-size:12px;color:var(--muted)}
+  .barcodeCard svg{background:#fff;border-radius:6px;padding:6px}
+  .barcodeGrid{display:flex;flex-direction:column;gap:10px}
+  @media print{
+    header,nav,.card h2,.btn,select,.field,.hint,#setupCard{display:none!important}
+    .barcodeCard{border:1px solid #ccc;break-inside:avoid;background:#fff;color:#000}
+    .barcodeCard .cod,.barcodeCard .adr{color:#000}
+    body{background:#fff}
+  }
 </style>
 </head>
 <body>
@@ -77,6 +90,7 @@
 <nav>
   <button class="tabBtn active" data-tab="ture">Ture</button>
   <button class="tabBtn" data-tab="scanare">Scanare Pachete</button>
+  <button class="tabBtn" data-tab="creare">Creare Pachete Test</button>
   <button class="tabBtn" data-tab="pachete">Toate Pachetele</button>
   <button class="tabBtn" data-tab="zone">Configurare Zone PLZ</button>
 </nav>
@@ -140,6 +154,34 @@
     </div>
   </div>
 
+  <!-- TAB CREARE PACHETE TEST -->
+  <div class="tab" id="tab-creare">
+    <div class="card">
+      <h2>Creare pachet de test</h2>
+      <div class="grid">
+        <div class="field"><label>Nume client</label><input id="cp-client" placeholder="Maria Müller"></div>
+        <div class="field"><label>Stradă + număr</label><input id="cp-strada" placeholder="Bahnhofstr. 5"></div>
+        <div class="field"><label>Cod poștal (PLZ)</label><input id="cp-plz" placeholder="94032" maxlength="5"></div>
+        <div class="field"><label>Oraș</label><input id="cp-oras" placeholder="Passau"></div>
+        <div class="field"><label>Zonă</label><select id="cp-zona"></select></div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:6px">
+        <button class="btn" onclick="creeazaPachetTest()">+ Crează și generează cod de bare</button>
+        <button class="btn secondary" onclick="printBarcodes()">🖨 Printează toate codurile</button>
+        <button class="btn secondary" onclick="stergeToatePacheteTest()">🗑 Șterge toate de test</button>
+      </div>
+      <div class="hint" id="cp-feedback"></div>
+    </div>
+
+    <div class="card">
+      <h2>Coduri de bare generate</h2>
+      <div class="hint" style="margin-bottom:12px">Scanează fiecare cod cu camera telefonului sau cu scanner-ul — va apărea în tab-ul "Scanare Pachete" pentru atribuire la o tură.</div>
+      <div class="barcodeGrid" id="barcodeGrid">
+        <div class="empty" id="barcodeEmpty">Niciun pachet de test creat încă.</div>
+      </div>
+    </div>
+  </div>
+
   <!-- TAB TOATE PACHETELE -->
   <div class="tab" id="tab-pachete">
     <div class="card">
@@ -176,12 +218,12 @@
 <script>
 // ============== TODO firebaseConfig ==============
 const firebaseConfig = {
-  apiKey: "AIzaSyCwlTzMHhXsGcPcnH0U-3vKQ38oHBGsgfI",
-  authDomain: "livrari-mtc.firebaseapp.com",
-  projectId: "livrari-mtc",
-  storageBucket: "livrari-mtc.firebasestorage.app",
-  messagingSenderId: "148138608126",
-  appId: "1:148138608126:web:700903c89e697c11cdecaf"
+  apiKey: "PASTE_API_KEY",
+  authDomain: "PASTE_PROJECT.firebaseapp.com",
+  projectId: "PASTE_PROJECT",
+  storageBucket: "PASTE_PROJECT.appspot.com",
+  messagingSenderId: "PASTE_ID",
+  appId: "PASTE_APP_ID"
 };
 // ===================================================
 
@@ -216,7 +258,7 @@ function todayStr(){ return new Date().toISOString().slice(0,10); }
 function genPin(){ return String(Math.floor(1000+Math.random()*9000)); }
 
 function initSelects(){
-  document.querySelectorAll('#t-zona, #z-zona').forEach(sel=>{
+  document.querySelectorAll('#t-zona, #z-zona, #cp-zona').forEach(sel=>{
     sel.innerHTML = ZONE.map(z=>`<option value="${z.cod}">${z.cod} - ${z.nume}</option>`).join('');
   });
   document.getElementById('t-data').value = todayStr();
@@ -247,6 +289,7 @@ async function init(){
     renderScanate();
     renderToatePachetele();
     renderTure();
+    renderBarcodes();
   });
 
   db.collection('zonePlz').onSnapshot(snap=>{
@@ -391,6 +434,104 @@ async function reatribuie(pachetId, turaId){
   if(!turaId) return;
   const tura = tureCache.find(t=>t.id===turaId);
   await db.collection('pachete').doc(pachetId).update({turaId, zona: tura.zona});
+}
+
+// ---------- CREARE PACHETE TEST ----------
+function genCodTest(){
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return 'MTC-' + Array.from({length:6}, ()=>chars[Math.floor(Math.random()*chars.length)]).join('');
+}
+
+async function creeazaPachetTest(){
+  const client = document.getElementById('cp-client').value.trim();
+  const strada = document.getElementById('cp-strada').value.trim();
+  const plz = document.getElementById('cp-plz').value.trim();
+  const oras = document.getElementById('cp-oras').value.trim();
+  const zona = document.getElementById('cp-zona').value;
+  const fb = document.getElementById('cp-feedback');
+
+  if(!client || !strada || !plz || !oras){
+    fb.textContent = 'Completează toate câmpurile.'; fb.style.color='var(--danger)'; return;
+  }
+  if(!/^\d{5}$/.test(plz)){
+    fb.textContent = 'Codul poștal trebuie să aibă exact 5 cifre.'; fb.style.color='var(--danger)'; return;
+  }
+
+  const cod = genCodTest();
+  const adresa = `${strada}, ${plz} ${oras}`;
+
+  await db.collection('pachete').add({
+    cod, clientNume: client, adresa,
+    plz, oras, strada, zona,
+    turaId: null, status: 'in_depozit',
+    isTest: true,
+    semnatura: null, vecin: null,
+    oraScanareDepozit: firebase.firestore.FieldValue.serverTimestamp(),
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+
+  fb.textContent = `✓ Pachet ${cod} creat — scanează-l în tab-ul "Scanare Pachete" sau direct din aplicația Android.`;
+  fb.style.color = 'var(--ok)';
+  document.getElementById('cp-client').value = '';
+  document.getElementById('cp-strada').value = '';
+  document.getElementById('cp-plz').value = '';
+  document.getElementById('cp-oras').value = '';
+}
+
+async function stergeToatePacheteTest(){
+  if(!confirm('Ștergi toate pachetele de test? Nu se poate anula.')) return;
+  const snap = await db.collection('pachete').where('isTest','==',true).get();
+  const batch = db.batch();
+  snap.docs.forEach(d => batch.delete(d.ref));
+  await batch.commit();
+}
+
+function printBarcodes(){ window.print(); }
+
+function renderBarcodes(){
+  const testPachete = pacheteCache.filter(p => p.isTest);
+  const grid = document.getElementById('barcodeGrid');
+  const empty = document.getElementById('barcodeEmpty');
+  empty.style.display = testPachete.length ? 'none' : 'block';
+
+  // Păstrează doar cardurile existente sau recreează
+  const existingIds = new Set([...grid.querySelectorAll('[data-pachet-id]')].map(el=>el.dataset.pachetId));
+  const newIds = new Set(testPachete.map(p=>p.id));
+
+  // Șterge carduri dispărute
+  grid.querySelectorAll('[data-pachet-id]').forEach(el=>{
+    if(!newIds.has(el.dataset.pachetId)) el.remove();
+  });
+
+  // Adaugă carduri noi
+  testPachete.forEach(p=>{
+    if(existingIds.has(p.id)) return;
+    const div = document.createElement('div');
+    div.className = 'barcodeCard';
+    div.dataset.pachetId = p.id;
+    div.innerHTML = `
+      <div class="info">
+        <div class="cod">${p.cod}</div>
+        <div class="adr">${p.clientNume || ''}</div>
+        <div class="adr">${p.adresa}</div>
+        <div class="adr" style="margin-top:4px"><span class="badge ${zoneBadgeClass(p.zona)}">${p.zona}</span></div>
+      </div>
+      <svg id="bc-${p.id}" style="max-width:220px;width:100%"></svg>
+      <button class="btn secondary" style="padding:6px 12px;font-size:12px;margin-top:0" onclick="stergeUnPachet('${p.id}')">✕</button>
+    `;
+    grid.appendChild(div);
+    try {
+      JsBarcode(`#bc-${p.id}`, p.cod, {
+        format: 'CODE128', width: 2, height: 60,
+        displayValue: true, fontSize: 13,
+        background: '#ffffff', lineColor: '#000000'
+      });
+    } catch(e){}
+  });
+}
+
+async function stergeUnPachet(id){
+  await db.collection('pachete').doc(id).delete();
 }
 
 // ---------- ZONE PLZ ----------
